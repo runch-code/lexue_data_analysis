@@ -2,7 +2,7 @@
 import time
 import sys
 from pathlib import Path
-from new import *
+# from new import *
 from load_and_preprocess import *
 from visualization import *
 from user_analysis import *
@@ -10,7 +10,7 @@ from user_analysis import *
 def main():
     # 命令行参数处理
     if len(sys.argv) < 2:
-        print("用法: python main.py [文件/文件夹]... [-o 分析结果输出目录]")
+        print("用法: python parquet2csv.py [文件/文件夹]... [-o 分析结果输出目录]")
         return False
     
     """命令行参数处理"""
