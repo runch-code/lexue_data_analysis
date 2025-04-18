@@ -14,7 +14,7 @@ def plot_province_distribution(df, base_dir=None):
     province_count = df['province'].value_counts()
     # 将省份名称和数量转换为字典
     province_count = list(zip(province_count.index, province_count.values.tolist()))
-    province_count = [(province, count) for province, count in province_count if count > 0]
+    province_count = [(province, count) for province, count in province_count if (count > 0 and province != 'unknown')]
     # print(province_count)
     # 提取count中的最大值
     count = [count for _, count in province_count]
@@ -73,9 +73,16 @@ def plot_price_distribution(df, base_dir=None):
     plt.figure(figsize=(12, 7), facecolor=COLORS['bg'])
     ax = plt.gca()
     
-    # 分箱与绘图
     prices = df['avg_price'].dropna()
-    bins = np.linspace(prices.min(), prices.quantile(0.95), 15)
+    # 计算最小值和最大值
+    min_price = prices.min()
+    max_price = prices.max()
+    
+    # 计算分箱数（200元范围一个分箱）
+    bin_width = int((max_price - min_price) / 200)
+    
+    # 分箱与绘图
+    bins = np.linspace(prices.min(), prices.quantile(0.95), bin_width)
     
     # 使用对比色方案
     plt.hist(prices, bins=bins, 
@@ -119,9 +126,9 @@ def plot_price_distribution(df, base_dir=None):
     plt.grid(axis='y', alpha=0.3, color=COLORS['text'])
     
     # 坐标轴优化
-    ax.set_xlim(0, 1000)
+    ax.set_xlim(0, max_price*1.05)
     ax.xaxis.set_major_formatter('¥{x:,.0f}')
-    plt.xticks(np.linspace(0, 1000, 6))
+    plt.xticks(np.linspace(0, max_price*1.05, int(bin_width/3)))
     
     plt.tight_layout()
     if base_dir:
@@ -147,20 +154,21 @@ def plot_activity_timeline(df, base_dir=None):
     ax = plt.gca()
 
     # 数据处理
-    time_data = pd.to_datetime(df['timestamp']).dt.floor('H').dt.hour
+    time_data = pd.to_datetime(df['timestamp']).dt.floor('h').dt.hour
     hourly_count = time_data.value_counts().sort_index()
 
     # 动态Y轴范围调整（保留10%头部空间）
     y_min, y_max = hourly_count.min(), hourly_count.max()
+    # print(f"Y轴范围: {y_min} - {y_max}")
     y_padding = (y_max - y_min) * 0.1
     ax.set_ylim(y_min - y_padding, y_max + y_padding)
 
-    # 高级平滑处理
+    '''# 高级平滑处理
     from scipy.signal import savgol_filter
     smoothed = savgol_filter(hourly_count.values, 
                             window_length=5, 
                             polyorder=3)
-
+    '''
     # 增强对比度可视化组件
     # 1. 渐变填充增强深度感知
     gradient = np.linspace(0, 1, 256).reshape(1, -1)
@@ -170,14 +178,15 @@ def plot_activity_timeline(df, base_dir=None):
              alpha=0.15, zorder=0)
 
     # 2. 主曲线增强
-    ax.plot(hourly_count.index, smoothed, 
+    # print(hourly_count.index, hourly_count)
+    ax.plot(hourly_count.index, hourly_count, 
            color=COLORS['line'], lw=4, 
            marker='o', markersize=10, markerfacecolor='white',
            zorder=3, path_effects=[pe.Stroke(linewidth=6, foreground='#ffffff'), pe.Normal()])
 
     # 3. 对比度刻度系统
-    ax.yaxis.set_major_locator(plt.MaxNLocator(10))  # 增加主刻度密度
-    ax.yaxis.set_minor_locator(plt.AutoMinorLocator(5))  # 添加次要刻度
+    # ax.yaxis.set_major_locator(plt.MaxNLocator(10))  # 增加主刻度密度
+    # ax.yaxis.set_minor_locator(plt.AutoMinorLocator(5))  # 添加次要刻度
     ax.tick_params(axis='y', which='both', labelsize=10, colors=COLORS['text'])
     ax.spines['left'].set_linewidth(1.5)
 
@@ -187,7 +196,7 @@ def plot_activity_timeline(df, base_dir=None):
            ms=14, mec=COLORS['peak'], mfc='white', mew=2, zorder=4)
     ax.annotate(f'峰值时段: {peak_hour:02d}:00\n活跃用户: {hourly_count.max():,}',
                xy=(peak_hour, hourly_count.max()),
-               xytext=(10, ax.get_ylim()[1]*0.8) if peak_hour < 12 else (14, ax.get_ylim()[1]*0.8),
+               xytext=(10, hourly_count.max()) if peak_hour < 12 else (14, hourly_count.max()),
                arrowprops=dict(arrowstyle='->', color=COLORS['peak'], lw=2,
                                connectionstyle="arc3,rad=0.2"),
                bbox=dict(boxstyle='round', facecolor='white', alpha=0.95),
@@ -235,6 +244,7 @@ def plot_consumption_analysis(df, base_dir=None):
     })
 
     """客单价分布可视化"""
+    plot_price_distribution(df, base_dir=base_dir)
     '''plt.figure(figsize=(12, 7), facecolor='#f5f5f5')
     ax = plt.gca()
     
@@ -277,7 +287,7 @@ def plot_consumption_analysis(df, base_dir=None):
     ax = plt.gca()
     flag = False
     
-    category_data = df.groupby('category')['avg_price'].sum().nlargest(10).sort_values()
+    category_data = df.groupby('categories')['avg_price'].sum().nlargest(10).sort_values()
     
     # 当数值过大时，降低category_data的数量级（使用亿元为单位）
     if category_data.max() > 100000000:
@@ -308,7 +318,7 @@ def plot_consumption_analysis(df, base_dir=None):
         plt.text(label_x, bar.get_y()+bar.get_height()/2, 
                 label_text, va='center', color=color, fontsize=10)
 
-    plt.title('品类销售额分析\n(Category sales analysis)', pad=20)
+    plt.title('品类销售额分析(top 10)\n(Category sales analysis top 10)', pad=20)
     if flag:
         plt.xlabel('销售额（亿元）', labelpad=12)
     else:
@@ -323,6 +333,7 @@ def plot_consumption_analysis(df, base_dir=None):
     plt.close()
 
     # ===== 用户活跃时段分析 =====
+    plot_activity_timeline(df, base_dir=base_dir)
     '''plt.figure(figsize=(12, 6), facecolor='#f8f9fa')
     ax = plt.gca()
     

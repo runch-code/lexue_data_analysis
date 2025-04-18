@@ -10,7 +10,7 @@ from user_analysis import *
 def main():
     # 命令行参数处理
     if len(sys.argv) < 2:
-        print("用法: python parquet2csv.py [文件/文件夹]... [-o 分析结果输出目录]")
+        print("用法: python main.py [文件/文件夹]... [-o 分析结果输出目录]")
         return False
     
     """命令行参数处理"""
@@ -25,9 +25,17 @@ def main():
             if p.is_dir():
                 file_paths.extend(p.glob("**/*.parquet"))
                 file_paths.extend(p.glob("**/*.parq"))
+                file_paths.extend(p.glob("**/*.csv"))
             else:
                 file_paths.append(p)
             i += 1
+    
+    # 判断file_paths中文件是否为相同类型
+    if len(file_paths) > 1:
+        file_types = set(p.suffix for p in file_paths)
+        if len(file_types) > 1:
+            print("警告：混合文件类型，可能导致读取错误")
+            return False
     
     # 输出目录处理
     if output_dir:
@@ -47,8 +55,33 @@ def main():
     
     """数据加载"""
     start_time = time.time()
-    # df = load_data_test("debug\\test.csv")
-    df = load_parquet_data(valid_files, if_file_pattern=False) # 读取数据
+    # 判断文件类型
+    if len(valid_files) == 1:
+        file_path = valid_files[0]
+        if file_path.suffix in ['.parquet', '.parq']:
+            print("正在读取单个parquet文件...")
+            # 读取单个文件
+            df = load_parquet_data([file_path], if_file_pattern=False) # 读取数据
+        elif file_path.suffix == '.csv':
+            print("正在读取单个csv文件...")
+            # 读取单个文件
+            df = load_csv_data([file_path], if_file_pattern=False) # 读取数据
+        else:
+            print(f"警告：不支持的文件类型 {file_path.suffix}")
+            return False
+    else:
+        # 读取多个文件
+        if valid_files[0].suffix in ['.parquet', '.parq']:
+            print("正在读取多个parquet文件...")
+            # 读取多个文件
+            df = load_parquet_data(valid_files, if_file_pattern=False) # 读取数据
+        elif valid_files[0].suffix == '.csv':
+            print("正在读取多个csv文件...")
+            # 读取多个文件
+            df = load_csv_data(valid_files, if_file_pattern=False) # 读取数据
+        else:
+            print(f"警告：不支持的文件类型 {valid_files[0].suffix}")
+            return False
     load_time = time.time() - start_time
     
     """正式分析流程"""

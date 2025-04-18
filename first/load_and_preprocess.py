@@ -13,8 +13,8 @@ def parse_purchase_history(record):
     try:
         data = json.loads(record.replace("'", '"'))
         return pd.Series({
-            'avg_price': data.get('average_price', 0),
-            'category': data.get('category', 'unknown'),
+            'avg_price': data.get('avg_price', 0),
+            'categories': data.get('categories', 'unknown'),
             'items_count': len(data.get('items', []))
         })
     except:
@@ -26,7 +26,7 @@ def load_data(file_pattern):
     for file in glob.glob(file_pattern):
         for chunk in pd.read_csv(file, chunksize=10000):
             # 解析关键字段
-            chunk[['avg_price', 'category', 'items_count']] = chunk['purchase_history'].apply(parse_purchase_history)
+            chunk[['avg_price', 'categories', 'items_count']] = chunk['purchase_history'].apply(parse_purchase_history)
             
             # 地址解析
             # 从中文地址中提取省市信息
@@ -40,37 +40,55 @@ def load_data(file_pattern):
             chunk['province'] = chunk['province'].apply(lambda x: x[0] if len(x) > 0 else 'unknown') # 如果没有匹配到省份，则标记为'unknown'
             # print(chunk['province'])
             
+            # 将last_login键名称改为timestamp
+            if 'last_login' in chunk.columns and 'timestamp' not in chunk.columns:
+                chunk.rename(columns={'last_login': 'timestamp'}, inplace=True)
+            # 将fullname键名称改为chinese_name
+            if 'fullname' in chunk.columns and 'chinese_name' not in chunk.columns:
+                chunk.rename(columns={'fullname': 'chinese_name'}, inplace=True)
+            
             chunks.append(chunk)
     return pd.concat(chunks)
 
-def load_data_test(file_pattern):
+def load_csv_data(valid_files, if_file_pattern=False):
     """高效加载合并多个CSV文件"""
     chunks = []
     
     # 获取文件列表
-    files = glob.glob(file_pattern)
+    files = glob.glob(valid_files) if if_file_pattern else valid_files
+    print(f"读取 {len(files)} 个文件")
     
     # 第一层进度条：文件处理进度
-    with tqdm(files, desc="📂 Processing files", unit="file") as file_pbar:
+    with tqdm(files, desc="Processing files", unit="file") as file_pbar:
         for file in file_pbar:
             # 设置当前文件的进度描述
-            file_pbar.set_postfix(file=file.split("\\")[-1][:10])  # 显示文件名（取后10字符）
+            file_pbar.set_postfix(file=str(file).split("\\")[-1][:10])  # 显示文件名（取后10字符）
             
             # 第二层进度条：块处理进度
             chunk_iter = pd.read_csv(file, chunksize=1000000)
-            with tqdm(desc="📦 Processing chunks", unit="chunk", leave=False) as chunk_pbar:
+            with tqdm(desc="Processing chunks", unit="chunk", leave=False) as chunk_pbar:
                 for chunk in chunk_iter:
                     # 解析关键字段
-                    chunk[['avg_price', 'category', 'items_count']] = chunk['purchase_history'].apply(parse_purchase_history)
+                    chunk[['avg_price', 'categories', 'items_count']] = chunk['purchase_history'].apply(parse_purchase_history)
                     
                     # 地址解析
+                    # 将chinese_address建名称改为address
+                    if 'chinese_address' in chunk.columns and 'address' not in chunk.columns:
+                        chunk.rename(columns={'chinese_address': 'address'}, inplace=True)
                     # 从中文地址中提取省市信息
                     province_mapper = mapper.province_country_mapper
                     province_list = [p for p in province_mapper.keys() 
                                    if p.endswith(('市', '省', '自治区', '特别行政区'))]
                     # 解析chunk["chinese_address"]列
-                    chunk['province'] = chunk['chinese_address'].apply(
+                    chunk['province'] = chunk['address'].apply(
                         lambda x: next((p for p in province_list if p in x), 'unknown'))
+                    
+                    # 将last_login键名称改为timestamp
+                    if 'last_login' in chunk.columns and 'timestamp' not in chunk.columns:
+                        chunk.rename(columns={'last_login': 'timestamp'}, inplace=True)
+                    # 将fullname键名称改为chinese_name
+                    if 'fullname' in chunk.columns and 'chinese_name' not in chunk.columns:
+                        chunk.rename(columns={'fullname': 'chinese_name'}, inplace=True)
                     
                     chunks.append(chunk)
                     chunk_pbar.update(1)  # 更新块进度条
@@ -120,9 +138,12 @@ def load_parquet_data(valid_files, if_file_pattern=False):
                 df = batch.to_pandas()
                 
                 # 解析字段
-                df[['avg_price', 'category', 'items_count']] = df['purchase_history'].apply(parse_purchase_history)
+                df[['avg_price', 'categories', 'items_count']] = df['purchase_history'].apply(parse_purchase_history)
                 
                 # 地址解析
+                # 将chinese_address建名称改为address
+                if 'chinese_address' in df.columns and 'address' not in df.columns:
+                    df.rename(columns={'chinese_address': 'address'}, inplace=True)
                 # 从mapper.province_country_mapper的key中获取省信息列表（包含市，省，自治区）
                 province_mapper = mapper.province_country_mapper
                 province_list = list(province_mapper.keys())
@@ -131,8 +152,16 @@ def load_parquet_data(valid_files, if_file_pattern=False):
                 # 解析chunk["chinese_address"]列
                 df['province'] = 'unknown'
                 for province in province_list:
-                    mask = df['chinese_address'].str.contains(province, na=False)
+                    # mask = df['chinese_address'].str.contains(province, na=False)
+                    mask = df['address'].str.contains(province, na=False)
                     df.loc[mask, 'province'] = province
+                
+                # 将last_login键名称改为timestamp
+                if 'last_login' in df.columns and 'timestamp' not in df.columns:
+                    df.rename(columns={'last_login': 'timestamp'}, inplace=True)
+                # 将fullname键名称改为chinese_name
+                if 'fullname' in df.columns and 'chinese_name' not in df.columns:
+                    df.rename(columns={'fullname': 'chinese_name'}, inplace=True)
                 
                 batches.append(df)
                 

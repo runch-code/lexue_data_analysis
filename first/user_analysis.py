@@ -87,26 +87,6 @@ def build_user_profiles(df):
     
     return rfm
 
-def identify_high_value_users_old(rfm_df, df, debug=False):
-    # debug
-    if debug:
-        check_unhashable(df, ['user_name', 'province', 'credit_score'])
-    
-    """识别高价值用户"""
-    # 综合评分模型
-    rfm_df['hv_score'] = 0.5*rfm_df['M'] + 0.3*rfm_df['F'] + 0.2*rfm_df['R']
-    
-    # 合并原始数据
-    high_value_users = rfm_df[rfm_df['hv_score'] >= 4].merge(
-        df[['user_name', 'chinese_name', 'province', 'credit_score']].drop_duplicates(),
-        on='user_name'
-    )
-    
-    # 添加业务规则：信用分高于700
-    # high_value_users = high_value_users[high_value_users['credit_score'] >= 500]
-    
-    return high_value_users
-
 def identify_high_value_users(rfm_df, df, method='composite'):
     """多维度高价值用户识别"""
     # 复合评分模型
@@ -115,16 +95,26 @@ def identify_high_value_users(rfm_df, df, method='composite'):
                       rfm_df['M']*0.6)
     
     # 业务规则过滤
-    high_value = rfm_df[
-        (rfm_df['score'] >= 4) &
-        (rfm_df['frequency'] >= 20)
-    ].merge(
-        df[['user_name', 'chinese_name', "province", 'credit_score', 'income', 'is_active']].drop_duplicates(),
-        on='user_name'
-    )
-    
-    # 信用分过滤
-    high_value = high_value[high_value['credit_score'] >= 650]
+    # 判断df中是否包含'credit_score'列
+    if 'credit_score' not in df.columns:
+        print("提示：数据集中不包含'credit_score'列，无法进行信用分过滤")
+        high_value = rfm_df[
+            (rfm_df['score'] >= 4.5) &
+            (rfm_df['frequency'] >= 1)
+        ].merge(
+            df[['user_name', 'chinese_name', "province", 'income', 'is_active']].drop_duplicates(),
+            on='user_name'
+        )
+    else:
+        high_value = rfm_df[
+            (rfm_df['score'] >= 4.5) &
+            (rfm_df['frequency'] >= 1)
+        ].merge(
+            df[['user_name', 'chinese_name', "province", 'income', 'is_active', 'credit_score']].drop_duplicates(),
+            on='user_name'
+        )
+        # 信用分过滤
+        high_value = high_value[high_value['credit_score'] >= 650]
     
     # 收入分位数过滤
     income_threshold = high_value['income'].quantile(0.8)
