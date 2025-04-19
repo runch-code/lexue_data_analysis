@@ -80,6 +80,8 @@ def plot_price_distribution(df, base_dir=None):
     
     # 计算分箱数（200元范围一个分箱）
     bin_width = int((max_price - min_price) / 200)
+    if bin_width < 5:
+        bin_width = 5
     
     # 分箱与绘图
     bins = np.linspace(prices.min(), prices.quantile(0.95), bin_width)
